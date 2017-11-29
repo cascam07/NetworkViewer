@@ -22,7 +22,7 @@ function varargout = NetworkViewer(varargin)
 
 % Edit the above text to modify the response to help NetworkViewer
 
-% Last Modified by GUIDE v2.5 28-Nov-2017 10:59:03
+% Last Modified by GUIDE v2.5 29-Nov-2017 14:49:22
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -265,47 +265,64 @@ set(handles.PercThrString, 'String', ['Percolation Threshold:   ', num2str(perc)
 
 %Plot Average Degree
 axes(handles.DegreePlot);
-avgdeg_p = plot(avgdeg(:,1),avgdeg(:,2),'-o');
-hold on;
-avgdegree_perc = scatter(avgdeg(find(avgdeg(:,1) == perc),1),avgdeg(find(avgdeg(:,1) == perc),2),'*r')
-set(gca, 'Xdir', 'reverse')
-xlabel('Percent of Edges Retained');
-ylabel('Average Degree');
-legend([avgdegree_perc],'Percolation Threshold','Location','northwest');
-hold off;
+if(isfield(handles,'avgdeg_l') && any(strcmp(handles.avgdeg_l.String, [currentPatient,' ',currentCondition,' ', currentBand])))
+else
+    avgdeg_p = plot(avgdeg(:,1),avgdeg(:,2),'-o','DisplayName',[currentPatient,' ',currentCondition,' ', currentBand]);
+    hold on;
+    avgdegree_perc = scatter(avgdeg(find(avgdeg(:,1) == perc),1),avgdeg(find(avgdeg(:,1) == perc),2),'*r','DisplayName','Percolation Threshold');
+    handles.avgdeg_l = legend('-DynamicLegend','Location','northwest');
+    set(gca, 'Xdir', 'reverse')
+    xlabel('Percent of Edges Retained');
+    ylabel('Average Degree');
+    guidata(hObject, handles);   
+end
+
+
 
 %Plot Transitivity
 axes(handles.TransitivityPlot);
-transit_p = plot(transit(:,1),transit(:,2),'-o');
-hold on;
-transit_perc = scatter(transit(find(transit(:,1) == perc),1),transit(find(transit(:,1) == perc),2),'*r')
-set(gca, 'Xdir', 'reverse')
-xlabel('Percent of Edges Retained');
-ylabel('Transitivity');
-legend([transit_perc],'Percolation Threshold','Location','northwest');
-hold off;
+if(isfield(handles,'transit_l') && any(strcmp(handles.transit_l.String, [currentPatient,' ',currentCondition,' ', currentBand])))
+else
+    transit_p = plot(transit(:,1),transit(:,2),'-o','DisplayName',[currentPatient,' ',currentCondition,' ', currentBand]);
+    hold on;
+    transit_perc = scatter(transit(find(transit(:,1) == perc),1),transit(find(transit(:,1) == perc),2),'*r','DisplayName','Percolation Threshold');
+    handles.transit_l = legend('-DynamicLegend','Location','northwest');
+    set(gca, 'Xdir', 'reverse')
+    xlabel('Percent of Edges Retained');
+    ylabel('Transitivity');
+    guidata(hObject, handles); 
+end
+
+
 
 %Plot Characteristic Path Length
 axes(handles.CharPathPlot);
-charpathlen_p = plot(charpathlen(:,1),charpathlen(:,2),'-o');
-hold on;
-charpathlen_perc = scatter(charpathlen(find(charpathlen(:,1) == perc),1),charpathlen(find(charpathlen(:,1) == perc),2),'*r')
-set(gca, 'Xdir', 'reverse')
-xlabel('Percent of Edges Retained');
-ylabel('Characteristic Path Length');
-legend([charpathlen_perc],'Percolation Threshold','Location','northwest');
-hold off;
+if(isfield(handles,'charpathlen_l') && any(strcmp(handles.charpathlen_l.String, [currentPatient,' ',currentCondition,' ', currentBand])))
+else
+    charpathlen_p = plot(charpathlen(:,1),charpathlen(:,2),'-o','DisplayName',[currentPatient,' ',currentCondition,' ', currentBand]);
+    hold on;
+    charpathlen_perc = scatter(charpathlen(find(charpathlen(:,1) == perc),1),charpathlen(find(charpathlen(:,1) == perc),2),'*r','DisplayName','Percolation Threshold');
+    handles.charpathlen_l = legend('-DynamicLegend','Location','northwest');
+    set(gca, 'Xdir', 'reverse')
+    xlabel('Percent of Edges Retained');
+    ylabel('Characteristic Path Length');
+    guidata(hObject, handles); 
+end
+
 
 %Plot Assortivity Coefficient
 axes(handles.AssortPlot);
-assort_p = plot(assort(:,1),assort(:,2),'-o');
-hold on;
-assort_perc = scatter(assort(find(assort(:,1) == perc),1),assort(find(assort(:,1) == perc),2),'*r')
-set(gca, 'Xdir', 'reverse')
-xlabel('Percent of Edges Retained');
-ylabel('Assortivity Coefficient');
-legend([assort_perc],'Percolation Threshold','Location','northwest');
-hold off;
+if(isfield(handles,'assort_l') && any(strcmp(handles.assort_l.String, [currentPatient,' ',currentCondition,' ', currentBand])))
+else
+    assort_p = plot(assort(:,1),assort(:,2),'-o','DisplayName',[currentPatient,' ',currentCondition,' ', currentBand]);
+    hold on;
+    assort_perc = scatter(assort(find(assort(:,1) == perc),1),assort(find(assort(:,1) == perc),2),'*r','DisplayName','Percolation Threshold');
+    handles.assort_l = legend('-DynamicLegend','Location','northwest');
+    set(gca, 'Xdir', 'reverse')
+    xlabel('Percent of Edges Retained');
+    ylabel('Assortivity Coefficient');
+    guidata(hObject, handles);
+end
 
 %Update Data Table
 set(handles.DataTable,'Data',[avgdeg,transit(:,2),charpathlen(:,2),assort(:,2)])
@@ -416,3 +433,43 @@ else
 end
 % Update handles structure
 guidata(hObject, handles);
+
+
+% --- Executes during object creation, after setting all properties.
+function NetPlot_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to NetPlot (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: place code in OpeningFcn to populate NetPlot
+
+
+% --- Executes on button press in ClearButton.
+function ClearButton_Callback(hObject, eventdata, handles)
+% hObject    handle to ClearButton (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+axes(handles.DegreePlot);
+cla
+handles = rmfield(handles, 'avgdeg_l');
+guidata(hObject, handles);
+legend('hide');
+
+axes(handles.TransitivityPlot);
+cla
+handles = rmfield(handles, 'transit_l');
+guidata(hObject, handles);
+legend('hide');
+
+axes(handles.CharPathPlot);
+cla
+handles = rmfield(handles, 'charpathlen_l');
+guidata(hObject, handles);
+legend('hide');
+
+axes(handles.AssortPlot);
+cla
+handles = rmfield(handles, 'assort_l');
+guidata(hObject, handles);
+legend('hide');
+
