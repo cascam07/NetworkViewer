@@ -22,7 +22,7 @@ function varargout = NetworkViewer(varargin)
 
 % Edit the above text to modify the response to help NetworkViewer
 
-% Last Modified by GUIDE v2.5 29-Nov-2017 14:49:22
+% Last Modified by GUIDE v2.5 05-Dec-2017 10:11:16
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -59,8 +59,34 @@ handles.output = hObject;
 %*****************************************************************
 %Change Read In data to be provided by NetworkViewer function call
 %*****************************************************************
-%Read in coherence data
-handles.data = evalin('base','ECoG_conn.coh'); 
+
+%Handle user argument for network type
+if nargin > 4
+    %Read in connectivity data
+    switch(varargin{1})
+        case 'coh'
+            handles.data = evalin('base','ECoG_conn.coh'); 
+        case 'wpli'
+            handles.data = evalin('base','ECoG_conn.WPLI'); 
+        otherwise
+            error('Please provide a connectivity metric. Options are ''coh'' or ''wpli''')
+    end
+    switch(varargin{2})
+        case 'unweighted'
+            handles.NetworkType = 'Binarized';
+        case 'weighted'
+            handles.NetworkType = 'Thresholded';
+        case 'u'
+            handles.NetworkType = 'Binarized';
+        case 'w'
+            handles.NetworkType = 'Thresholded';
+        otherwise
+            error('Please provide a network type. Options are ''weighted'' or ''unweighted''. Defaulting to ''unweighted''')  
+    end
+else
+    error('Please provide the following arguments: [Connectivity Type] [Network Type]')    
+end
+
 %Read in patient data
 handles.patientdata = evalin('base','batchParams');
 
@@ -76,25 +102,6 @@ set(handles.BandMenu,'String',fieldnames(handles.data.(currentPatient).(currentC
 Bands = cellstr(get(handles.BandMenu,'String'));
 currentBand = Bands{get(handles.BandMenu,'Value')};
 
-
-%Handle user argument for network type
-if nargin > 3
-    switch(varargin{1})
-        case 'unweighted'
-            handles.NetworkType = 'Binarized';
-        case 'weighted'
-            handles.NetworkType = 'Thresholded';
-        case 'u'
-            handles.NetworkType = 'Binarized';
-        case 'w'
-            handles.NetworkType = 'Thresholded';
-        otherwise
-            disp('Options are ''weighted'' or ''unweighted''. Defaulting to ''unweighted''')
-            handles.NetworkType = 'Binarized';
-    end
-else
-    error('Please provide a network type. Options are ''weighted'' or ''unweighted''. Defaulting to ''unweighted''')    
-end
 
 %Update string displaying network type
 if strcmp(handles.NetworkType, 'Thresholded')
@@ -112,12 +119,13 @@ handles.NodeLabelFlag = 0;
 
 %Initialize Data Table
 netType = handles.NetworkType;
-avgdeg = handles.data.(currentPatient).(currentCondition).(currentBand).NetworkStats.(netType).AvgDeg;
+modularity = handles.data.(currentPatient).(currentCondition).(currentBand).NetworkStats.(netType).Modularity;
 transit = handles.data.(currentPatient).(currentCondition).(currentBand).NetworkStats.(netType).Transitivity;
 charpathlen = handles.data.(currentPatient).(currentCondition).(currentBand).NetworkStats.(netType).CharPathLen;
-assort = handles.data.(currentPatient).(currentCondition).(currentBand).NetworkStats.(netType).Assortitivity;
-set(handles.DataTable,'Data',[avgdeg,transit(:,2),charpathlen(:,2),assort(:,2)])
-set(handles.DataTable,'ColumnName',{'Thr','AvgDeg','Trans','CharPath','Assort'})
+swp = handles.data.(currentPatient).(currentCondition).(currentBand).NetworkStats.(netType).SWP;
+set(handles.DataTable,'Data',[modularity,transit(:,2),charpathlen(:,2),swp(:,2)])
+set(handles.DataTable,'ColumnName',{'Thr','Modularity','Trans','CharPath','Small-World'})
+
 
 % Update handles structure
 guidata(hObject, handles);
@@ -153,9 +161,8 @@ set(handles.ConditionMenu,'String',fieldnames(handles.data.(currentPatient)));
 
 %Update BandMenu with bands avaiable for selected conditon
 Conditions = cellstr(get(handles.ConditionMenu,'String'));
-currentCondition = Conditions{get(handles.ConditionMenu,'Value')};
+currentCondition = Conditions{1};
 set(handles.BandMenu,'String',fieldnames(handles.data.(currentPatient).(currentCondition)));
-
 
 
 
@@ -221,21 +228,21 @@ end
 
 
 % --- Executes during object creation, after setting all properties.
-function DegreePlot_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to DegreePlot (see GCBO)
+function ModularityPlot_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to ModularityPlot (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    empty - handles not created until after all CreateFcns called
 
-% Hint: place code in OpeningFcn to populate DegreePlot
+% Hint: place code in OpeningFcn to populate ModularityPlot
 
 
 % --- Executes during object creation, after setting all properties.
-function TransitivityPlot_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to TransitivityPlot (see GCBO)
+function TransPlot_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to TransPlot (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    empty - handles not created until after all CreateFcns called
 
-% Hint: place code in OpeningFcn to populate TransitivityPlot
+% Hint: place code in OpeningFcn to populate TransPlot
 
 
 
@@ -255,32 +262,31 @@ netType = handles.NetworkType;
 
 %Load graph metrics for selected data
 perc = handles.data.(currentPatient).(currentCondition).(currentBand).PercThr;
-avgdeg = handles.data.(currentPatient).(currentCondition).(currentBand).NetworkStats.(netType).AvgDeg;
+modularity = handles.data.(currentPatient).(currentCondition).(currentBand).NetworkStats.(netType).Modularity;
 transit = handles.data.(currentPatient).(currentCondition).(currentBand).NetworkStats.(netType).Transitivity;
 charpathlen = handles.data.(currentPatient).(currentCondition).(currentBand).NetworkStats.(netType).CharPathLen;
-assort = handles.data.(currentPatient).(currentCondition).(currentBand).NetworkStats.(netType).Assortitivity;
+swp = handles.data.(currentPatient).(currentCondition).(currentBand).NetworkStats.(netType).SWP;
 
 %Update percolation threshold string
 set(handles.PercThrString, 'String', ['Percolation Threshold:   ', num2str(perc)]);
 
-%Plot Average Degree
-axes(handles.DegreePlot);
-if(isfield(handles,'avgdeg_l') && any(strcmp(handles.avgdeg_l.String, [currentPatient,' ',currentCondition,' ', currentBand])))
+%Plot Modularity
+axes(handles.ModularityPlot);
+if(isfield(handles,'modularity_l') && any(strcmp(handles.modularity_l.String, [currentPatient,' ',currentCondition,' ', currentBand])))
 else
-    avgdeg_p = plot(avgdeg(:,1),avgdeg(:,2),'-o','DisplayName',[currentPatient,' ',currentCondition,' ', currentBand]);
+    modularity_p = plot(modularity(:,1),modularity(:,2),'-o','DisplayName',[currentPatient,' ',currentCondition,' ', currentBand]);
     hold on;
-    avgdegree_perc = scatter(avgdeg(find(avgdeg(:,1) == perc),1),avgdeg(find(avgdeg(:,1) == perc),2),'*r','DisplayName','Percolation Threshold');
-    handles.avgdeg_l = legend('-DynamicLegend','Location','northwest');
+    modularity_perc = scatter(modularity(find(modularity(:,1) == perc),1),modularity(find(modularity(:,1) == perc),2),'*r','DisplayName','Percolation Threshold');
+    handles.modularity_l = legend('-DynamicLegend','Location','northwest');
     set(gca, 'Xdir', 'reverse')
     xlabel('Percent of Edges Retained');
-    ylabel('Average Degree');
+    ylabel('Modularity');
     guidata(hObject, handles);   
 end
 
 
-
 %Plot Transitivity
-axes(handles.TransitivityPlot);
+axes(handles.TransPlot);
 if(isfield(handles,'transit_l') && any(strcmp(handles.transit_l.String, [currentPatient,' ',currentCondition,' ', currentBand])))
 else
     transit_p = plot(transit(:,1),transit(:,2),'-o','DisplayName',[currentPatient,' ',currentCondition,' ', currentBand]);
@@ -310,27 +316,27 @@ else
 end
 
 
-%Plot Assortivity Coefficient
-axes(handles.AssortPlot);
-if(isfield(handles,'assort_l') && any(strcmp(handles.assort_l.String, [currentPatient,' ',currentCondition,' ', currentBand])))
+%Plot Small-World Propensity
+axes(handles.SWPlot);
+if(isfield(handles,'swp_l') && any(strcmp(handles.swp_l.String, [currentPatient,' ',currentCondition,' ', currentBand])))
 else
-    assort_p = plot(assort(:,1),assort(:,2),'-o','DisplayName',[currentPatient,' ',currentCondition,' ', currentBand]);
+    swp_p = plot(swp(:,1),swp(:,2),'-o','DisplayName',[currentPatient,' ',currentCondition,' ', currentBand]);
     hold on;
-    assort_perc = scatter(assort(find(assort(:,1) == perc),1),assort(find(assort(:,1) == perc),2),'*r','DisplayName','Percolation Threshold');
-    handles.assort_l = legend('-DynamicLegend','Location','northwest');
+    swp_perc = scatter(swp(find(swp(:,1) == perc),1),swp(find(swp(:,1) == perc),2),'*r','DisplayName','Percolation Threshold');
+    handles.swp_l = legend('-DynamicLegend','Location','northwest');
     set(gca, 'Xdir', 'reverse')
     xlabel('Percent of Edges Retained');
-    ylabel('Assortivity Coefficient');
+    ylabel('Small-World Propensity');
     guidata(hObject, handles);
 end
 
 %Update Data Table
-set(handles.DataTable,'Data',[avgdeg,transit(:,2),charpathlen(:,2),assort(:,2)])
+set(handles.DataTable,'Data',[modularity,transit(:,2),charpathlen(:,2),swp(:,2)])
 
 
 % --- Executes on mouse press over axes background.
-function DegreePlot_ButtonDownFcn(hObject, eventdata, handles)
-% hObject    handle to DegreePlot (see GCBO)
+function ModularityPlot_ButtonDownFcn(hObject, eventdata, handles)
+% hObject    handle to ModularityPlot (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
@@ -449,13 +455,13 @@ function ClearButton_Callback(hObject, eventdata, handles)
 % hObject    handle to ClearButton (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
-axes(handles.DegreePlot);
+axes(handles.ModularityPlot);
 cla
-handles = rmfield(handles, 'avgdeg_l');
+handles = rmfield(handles, 'modularity_l');
 guidata(hObject, handles);
 legend('hide');
 
-axes(handles.TransitivityPlot);
+axes(handles.TransPlot);
 cla
 handles = rmfield(handles, 'transit_l');
 guidata(hObject, handles);
@@ -467,9 +473,17 @@ handles = rmfield(handles, 'charpathlen_l');
 guidata(hObject, handles);
 legend('hide');
 
-axes(handles.AssortPlot);
+axes(handles.SWPlot);
 cla
-handles = rmfield(handles, 'assort_l');
+handles = rmfield(handles, 'swp_l');
 guidata(hObject, handles);
 legend('hide');
 
+
+% --- Executes during object creation, after setting all properties.
+function SWPlot_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to SWPlot (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: place code in OpeningFcn to populate SWPlot
