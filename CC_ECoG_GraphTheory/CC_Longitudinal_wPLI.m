@@ -1,5 +1,8 @@
 %% Setup Environment
+
+%Change to fit your work environment
 computerSpecPrefix = '/Users/cpcasey3/Documents/ECoG/';
+
 if ~exist('defaultPath','var')
     dataPath = [computerSpecPrefix 'Data and analysis' filesep 'ECoG data' filesep];
 end
@@ -48,8 +51,9 @@ bands = {'delta','theta','alpha','beta','gamma'};%,'highGamma'};
 dsFs = 250;
 justRunNew = 1;
 
-segment_l = 20;
-trial_l = 4;
+segment_l = 10; %Length of segments within a 5 minute recording period
+trial_l = 2;    %Length of trials within a segment of length segment_l
+
 
 %% wPLI Analysis
 patientIDs = fieldnames(batchParams)';
@@ -87,18 +91,22 @@ for iPatient = patientSet
         else
             data_ECoGds = data_ECoG;
         end
-        %clear data_ECoG
+        clear data_ECoG
         
-        %Redefine data into 20s segments, each of which will be further subdivided into trials to calculate a wPLI value
+        %Redefine data into segments of length segment_l, each of which will be further subdivided into trials to calculate a wPLI value
         %for each segment
         
         cfg         = [];
-        cfg.length  = segment_l; %trial length in sec
+        cfg.length  = segment_l; %trial length in ms
         cfg.overlap = params.(thisCond).trialOverlap; %1/4 segment overlap
+        cfg.feedback   = 'no';
         data_ECoGds   = ft_redefinetrial(cfg, data_ECoGds);
         
-        %For each segment, divide into 4s trials and calculate wPLI for each segment
+        %For each segment, divide into trials of length trial_l and calculate wPLI for each segment
+        counter = 0;
         for iSegment = 1:length(data_ECoGds.trial)
+            counter = counter + 1;
+            
             seg_dat = [];
             seg_dat.trial = data_ECoGds.trial(iSegment);
             seg_dat.time = data_ECoGds.time(iSegment);
@@ -107,7 +115,7 @@ for iPatient = patientSet
             seg_dat.sampleinfo = data_ECoGds.sampleinfo(iSegment,:);
             
             cfg         = [];
-            cfg.length  = trial_l; %trial length in sec
+            cfg.length  = trial_l; %trial length in ms
             cfg.overlap = params.(thisCond).trialOverlap; %1/4 segment overlap
             seg_dat   = ft_redefinetrial(cfg, seg_dat);
             
@@ -122,60 +130,27 @@ for iPatient = patientSet
                 cfg.tapsmofrq  = freqSmoothing(iBand) ;
                 cfg.pad        = 'nextpow2';
                 cfg.keeptrials = 'yes';
+                cfg.feedback   = 'no';
                 FFT_ECoG       = ft_freqanalysis(cfg, seg_dat);
 
                 % compute connectivity as wpli
                 cfg         = [];
                 cfg.method  ='wpli_debiased';
                 cfg.jackknife = 'yes';
+                cfg.feedback   = 'no';
                 ECoG_conn.WPLI.(thisName).(thisCond).(['seg_' num2str(iSegment)]).(thisBand) = ft_connectivityanalysis(cfg,FFT_ECoG);
+                               
             end            
-        end       
-
+        end   
+                
+        
     end %Loop over conditions
     batchParams.(patientIDs{iPatient}) = params;
 end
-save([outPath 'ECoG_wPLI_long' setName '.mat'],'ECoG_conn','batchParams');
+save([outPath 'ECoG_wPLI_long_' num2str(segment_l) '.mat'],'-v7.3','ECoG_conn','batchParams');
 
 
-%% Calculate Percolation Threshold
-adjmatname = 'wpli_debiasedspctrm';
-for iPatient = 1:length(patientIDs)
-    thisName = patientIDs{iPatient};
-    %foreach condition, e.g. OAAS5
-    conditions = fieldnames(ECoG_conn.WPLI.(thisName));
-    for iCond = 1:length(conditions) 
-        thisCond = conditions{iCond};
-        
-        segs = fieldnames(ECoG_conn.WPLI.(thisName).(thisCond));
-        for iSegment = 1:length(segs)
-            thisSeg = segs{iSegment};
-            
-            %foreach frequency band, e.g. delta, beta, gamma
-            bands = fieldnames(ECoG_conn.WPLI.(thisName).(thisCond).(thisSeg));
-            for iBand = 1:length(bands)
-               thisBand = bands{iBand};
-
-               %Compute the Percolation Threshold for each adjacency matrix
-               adjmat = ECoG_conn.WPLI.(thisName).(thisCond).(thisSeg).(thisBand).(adjmatname);
-               if(any(any(adjmat < 0))) %If network has positive and negative values, make negative values positive
-                   adjmat(adjmat < 0) = adjmat(adjmat < 0).*-1; 
-               end
-               ECoG_conn.WPLI.(thisName).(thisCond).(thisSeg).(thisBand).PercThr = PercolationThr(adjmat, 'cutoff')*100;
-               disp([thisCond, ' ', thisBand,' ', num2str(ECoG_conn.WPLI.(thisName).(thisCond).(thisSeg).(thisBand).PercThr)])
-            end           
-        end
-    end
-    disp(['Completed: ', thisName, ' WPLI'])
-end        
-save([outPath 'ECoG_wPLI_long' setName '.mat'],'ECoG_conn','batchParams');
-
-
-%% Build Networks
-ECoG_conn = BuildNetworks(ECoG_conn);
-save([outPath 'ECoG_conn_' setName '.mat'],'ECoG_conn','batchParams');
-
-%% Add Percolation Networks
+%% Add Networks to ECoG_conn object based on adjacency matrices
 adjmatname = 'wpli_debiasedspctrm';
 patientIDs = fieldnames(ECoG_conn.WPLI);
 for iPatient = 1:length(patientIDs)
@@ -183,30 +158,51 @@ for iPatient = 1:length(patientIDs)
     conditions = fieldnames(ECoG_conn.WPLI.(thisName));
     for iCond = 1:length(conditions) 
         thisCond = conditions{iCond};
-        
+       
         segs = fieldnames(ECoG_conn.WPLI.(thisName).(thisCond));
         for iSegment = 1:length(segs)
             thisSeg = segs{iSegment};
+            if(strcmp(thisSeg, 'NetworkStats')) continue; end %Skip NetworkStats if these already exist
             bands = fieldnames(ECoG_conn.WPLI.(thisName).(thisCond).(thisSeg));
             for iBand = 1:length(bands)
-               thisBand = bands{iBand};
-               
-               %Compute the Percolation Network
-               %disp(thisBand)
-               %disp(ECoG_conn.WPLI.(thisName).(thisCond).(thisSeg).(thisBand))
+               thisBand = bands{iBand}; 
                adjmat = ECoG_conn.WPLI.(thisName).(thisCond).(thisSeg).(thisBand).(adjmatname);
-               if(any(any(adjmat < 0))) %If network has positive and negative values, make negative values positive
-                   adjmat(adjmat < 0) = adjmat(adjmat < 0).*-1; 
+               
+               if(any(any(adjmat < 0))) %If network has positive and negative values, make negative values zero
+                   adjmat(adjmat < 0) = 0; 
                end
-               percthr = ECoG_conn.WPLI.(thisName).(thisCond).(thisSeg).(thisBand).PercThr ./ 100;
-               ECoG_conn.WPLI.(thisName).(thisCond).(thisSeg).(thisBand).Thresholded = threshold_proportional(adjmat, percthr);
-               ECoG_conn.WPLI.(thisName).(thisCond).(thisSeg).(thisBand).Binarized = weight_conversion(ECoG_conn.WPLI.(thisName).(thisCond).(thisSeg).(thisBand).Thresholded, 'binarize');
+               
+               %Calculate absolute threshold from subject's most alert state
+               if iCond == 1
+                   num_pos_edges = (length(adjmat).^2)/2; %possible number of edges
+                   perc_thr = PercolationThr(adjmat, 'cutoff');
+                   thr_ind = round(num_pos_edges * perc_thr);
+                   edges = triu(adjmat);
+                   edges(isnan(edges)) = [];
+                   edges = sort(edges(:), 'descend');
+                   abs_thr = edges(thr_ind);
+                   ECoG_conn.WPLI.(thisName).(thisCond).(thisSeg).(thisBand).AbsThr = abs_thr;
+               else
+                   most_alert = fieldnames(ECoG_conn.WPLI.(thisName));
+                   most_alert = most_alert(1);
+                   if isfield(ECoG_conn.WPLI.(thisName).(most_alert{1}),thisSeg)
+                       abs_thr = ECoG_conn.WPLI.(thisName).(most_alert{1}).(thisSeg).(thisBand).AbsThr;
+                   else
+                       maxseg = fieldnames(ECoG_conn.WPLI.(thisName).(most_alert{1}));
+                       maxseg = maxseg{end};
+                       abs_thr = ECoG_conn.WPLI.(thisName).(most_alert{1}).(maxseg).(thisBand).AbsThr;
+                   end
+                   ECoG_conn.WPLI.(thisName).(thisCond).(thisSeg).(thisBand).AbsThr = abs_thr;
+               end
+
+               ECoG_conn.WPLI.(thisName).(thisCond).(thisSeg).(thisBand).Networks.Ref_Thresholded = threshold_absolute(adjmat, abs_thr);
+               ECoG_conn.WPLI.(thisName).(thisCond).(thisSeg).(thisBand).Networks.Ref_Binarized = weight_conversion(ECoG_conn.WPLI.(thisName).(thisCond).(thisSeg).(thisBand).Networks.Ref_Thresholded, 'binarize');
             end
         end
     end
 end        
 
-%% Calculate Network Stats (Avg. Degree, Transitivity, Char. Path, Assortitivity Coef.)
+%% Calculate Network Stats (Avg. Degree, Transitivity, Char. Path, Assortitivity Coef., Clustering Coef., Modularity, Small World Propensity)
 adjmatname = 'wpli_debiasedspctrm';
 patientIDs = fieldnames(ECoG_conn.WPLI);
 for iPatient = 1:length(patientIDs)
@@ -235,10 +231,11 @@ for iPatient = 1:length(patientIDs)
         segs = fieldnames(ECoG_conn.WPLI.(thisName).(thisCond));
         for iSegment = 1:length(segs)
             thisSeg = segs{iSegment};
+            if(strcmp(thisSeg, 'NetworkStats')) continue; end %Skip NetworkStats if these already exist
             bands = fieldnames(ECoG_conn.WPLI.(thisName).(thisCond).(thisSeg));
             for iBand = 1:length(bands)
                thisBand = bands{iBand};
-               thisThr = ECoG_conn.WPLI.(thisName).(thisCond).(thisSeg).(thisBand).PercThr;
+               thisThr = ECoG_conn.WPLI.(thisName).(thisCond).(thisSeg).(thisBand).AbsThr;
 
                %Compute Stats on Weighted Networks 
                if(~isfield(avgdeg_wei,thisBand))        avgdeg_wei.(thisBand) = [];          end              
@@ -249,7 +246,7 @@ for iPatient = 1:length(patientIDs)
                if(~isfield(modular_wei,thisBand))       modular_wei.(thisBand) = [];         end
                if(~isfield(swp_wei,thisBand))           swp_wei.(thisBand) = [];             end               
                                            
-               refNet = ECoG_conn.WPLI.(thisName).(thisCond).(thisSeg).(thisBand).Thresholded;
+               refNet = ECoG_conn.WPLI.(thisName).(thisCond).(thisSeg).(thisBand).Networks.Ref_Thresholded;
  
                %Average Degree
                avgdeg_wei.(thisBand) = [avgdeg_wei.(thisBand) ; iSegment, mean(degrees_und(refNet))];
@@ -277,7 +274,7 @@ for iPatient = 1:length(patientIDs)
                if(~isfield(modular_bin,thisBand))       modular_bin.(thisBand) = [];         end
                if(~isfield(swp_bin,thisBand))           swp_bin.(thisBand) = [];             end               
                                             
-               refNet = ECoG_conn.WPLI.(thisName).(thisCond).(thisSeg).(thisBand).Binarized;
+               refNet = ECoG_conn.WPLI.(thisName).(thisCond).(thisSeg).(thisBand).Networks.Ref_Binarized;
  
                %Average Degree
                avgdeg_bin.(thisBand) = [avgdeg_bin.(thisBand) ; iSegment, mean(degrees_und(refNet))];
@@ -318,25 +315,108 @@ for iPatient = 1:length(patientIDs)
     end
 end
 
+save([outPath 'ECoG_wPLI_long_' num2str(segment_l) '.mat'],'-v7.3','ECoG_conn','batchParams');
 
 
+%% Plot Graph Metrics
 
-%% Make matrix of percolation values for histograms
-percmat = [];
+bands = {'alpha','beta','delta','gamma','theta'};
+nbands = int32(length(bands));
+ncol = 2;
+nrow = double(idivide(nbands,ncol,'ceil'));
+patients = fieldnames(ECoG_conn.WPLI);
+
+%'AvgDeg', 'Transitivity', 'CharPathLen', 'Assortivity', 'ClusteringCoef', 'Modularity', or 'SWP'
+thisMetric = 'Modularity';
+
+for iPatient = 1:length(patients)
+    figure(iPatient);
+    thisPatient = patients{iPatient};
+    for iBand = 1:length(bands)    
+        band = bands{iBand};
+        subplot(nrow,ncol,iBand);
+        plotmetric(ECoG_conn, thisPatient, 'w', thisMetric, band);
+        title(band);
+    end
+    suptitle([thisPatient, ' ', thisMetric]);
+end
+
+%% Calculate Confidence Intervals and one-way-ANOVA
+GraphStats = [];
+GraphStatsMat = {'Patient', 'NetworkType', 'GraphMetric', 'FreqBand', 'p-Value'};
+patientIDs = fieldnames(ECoG_conn.WPLI);
 for iPatient = 1:length(patientIDs)
     thisName = patientIDs{iPatient};
+    
     conditions = fieldnames(ECoG_conn.WPLI.(thisName));
+    condAnova = [];
     for iCond = 1:length(conditions) 
         thisCond = conditions{iCond};        
-        segs = fieldnames(ECoG_conn.WPLI.(thisName).(thisCond));
-        for iSegment = 1:length(segs)
-            thisSeg = segs{iSegment};
-            bands = fieldnames(ECoG_conn.WPLI.(thisName).(thisCond).(thisSeg));
+        
+        nets = fieldnames(ECoG_conn.WPLI.(thisName).(thisCond).NetworkStats);
+        for iNet = 1:length(nets)
+            thisNet = nets{iNet};
+            
+            metrics = fieldnames(ECoG_conn.WPLI.(thisName).(thisCond).NetworkStats.(thisNet));
+            for iMetric = 1:length(metrics)
+                thisMetric = metrics{iMetric};
+                
+                bands = fieldnames(ECoG_conn.WPLI.(thisName).(thisCond).NetworkStats.(thisNet).(thisMetric));
+                for iBand = 1:length(bands)
+                   thisBand = bands{iBand};             
+                   
+                   values = ECoG_conn.WPLI.(thisName).(thisCond).NetworkStats.(thisNet).(thisMetric).(thisBand);
+                   values = values(:,2);
+                   
+                   mn = mean(values);                               % Mean
+                   SEM = std(values)/sqrt(length(values));          % Standard Error
+                   ts = tinv([0.025  0.975],length(values)-1);      % T-Score
+                   CI = mn + ts*SEM;                                % Confidence Intervals
+        
+                   GraphStats.WPLI.(thisName).(thisNet).(thisCond).(thisMetric).(thisBand).Mean = mn;
+                   GraphStats.WPLI.(thisName).(thisNet).(thisCond).(thisMetric).(thisBand).CI = CI;
+                   
+                   %If field doesn't exist, initialize it first then populate it
+                   try
+                       condAnova.WPLI.(thisNet).(thisMetric).(thisBand).Data = [condAnova.WPLI.(thisNet).(thisMetric).(thisBand).Data, values(1:length(condAnova.WPLI.(thisNet).(thisMetric).(thisBand).Data))];
+                   catch             
+                       condAnova.WPLI.(thisNet).(thisMetric).(thisBand).Data = [];
+                       condAnova.WPLI.(thisNet).(thisMetric).(thisBand).Data = [condAnova.WPLI.(thisNet).(thisMetric).(thisBand).Data, values];
+                   end                  
+                end                               
+            end           
+        end        
+    end
+    
+    nets = fieldnames(condAnova.WPLI);
+    for iNet = 1:length(nets)
+        thisNet = nets{iNet};
+
+        metrics = fieldnames(condAnova.WPLI.(thisNet));
+        for iMetric = 1:length(metrics)
+            thisMetric = metrics{iMetric};
+
+            bands = fieldnames(condAnova.WPLI.(thisNet).(thisMetric));
             for iBand = 1:length(bands)
                thisBand = bands{iBand};
-               %percmat = [percmat; thisName, thisCond, thisSeg, thisBand, num2str(ECoG_conn.WPLI.(thisName).(thisCond).(thisSeg).(thisBand).PercThr)];
-               percmat = [percmat, ECoG_conn.WPLI.(thisName).(thisCond).(thisSeg).(thisBand).PercThr];
-            end           
-        end
-    end
-end 
+               anova_data = condAnova.WPLI.(thisNet).(thisMetric).(thisBand).Data;
+               [p, tbl, stats] = anova1(anova_data, conditions, 'off');
+               GraphStats.WPLI.(thisName).(thisNet).ANOVA.(thisMetric).(thisBand).p = p;
+               GraphStats.WPLI.(thisName).(thisNet).ANOVA.(thisMetric).(thisBand).tbl = tbl;
+               GraphStats.WPLI.(thisName).(thisNet).ANOVA.(thisMetric).(thisBand).stats = stats;
+               disp([thisName ' ' thisNet ' ' thisMetric ' ' thisBand '   ' 'p-Value: ' num2str(p)])
+               GraphStatsMat = [GraphStatsMat; thisName, thisNet, thisMetric, thisBand, num2cell(p)];
+            end                               
+        end           
+    end 
+end  
+[h, crit_p, adj_ci_cvrg, adj_p] = fdr_bh(cell2mat(GraphStatsMat(2:end,5)));
+GraphStatsMat = [GraphStatsMat ['p.adj.FDR' num2cell(adj_p)']'];
+adj_p = bonf_holm(cell2mat(GraphStatsMat(2:end,5)));
+GraphStatsMat = [GraphStatsMat ['p.adj.Bonf' num2cell(adj_p)']'];
+
+%% 3D Brain Plotting Demo
+atlas = '/Users/cpcasey3/Documents/MATLAB/ToolBoxes/fieldtrip-20171031/template/anatomy/surface_pial_both.mat';
+adj = ECoG_conn.WPLI.patient394R.OAAS5.seg_2.alpha.Networks.Ref_Thresholded;
+plotbrain(adj, atlas, batchParams, 'patient394R', 0.25)
+
